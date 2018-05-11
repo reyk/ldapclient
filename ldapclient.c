@@ -75,7 +75,7 @@ usage(void)
 {
 	extern char	*__progname;
 
-	fprintf(stderr, "usage: %s [-Z] [-c capath] [-p port] [-b basedn]\n"
+	fprintf(stderr, "usage: %s [-LvxZ] [-c capath] [-p port] [-b basedn]\n"
 	    "%*s [-D binddn] [-w secret|-W] [-s scope] -h host [filter]\n",
 	    __progname, (int)(strlen(__progname) + strlen("usage: ")), "");
 	exit(1);
