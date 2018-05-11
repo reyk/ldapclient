@@ -87,7 +87,6 @@ main(int argc, char *argv[])
 	char			 passbuf[256];
 	struct ldapc		 ldap;
 	struct ldapc_search	 ls;
-	int			 flags = 0;
 	int			 ch;
 	int			 verbose = 1;
 
@@ -296,7 +295,7 @@ int
 ldapc_connect(struct ldapc *ldap)
 {
 	struct addrinfo		 ai, *res, *res0;
-	int			 ret, saved_errno, fd = -1, code;
+	int			 ret, saved_errno, fd = -1, code = -1;
 	struct aldap_message	*m;
 	const char		*errstr;
 	struct tls_config	*tls_config;
