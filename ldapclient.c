@@ -64,14 +64,14 @@ struct ldapc_search {
 	char		**ls_attr;
 };
 
-__dead void	 usage(void);
+__dead void	 ldapc_usage(void);
 int		 ldapc_connect(struct ldapc *);
 int		 ldapc_search(struct ldapc *, struct ldapc_search *);
 void		 ldapc_disconnect(struct ldapc *);
 const char	*ldapc_resultcode(enum result_code);
 
 __dead void
-usage(void)
+ldapc_usage(void)
 {
 	extern char	*__progname;
 
@@ -151,7 +151,7 @@ main(int argc, char *argv[])
 			/* provided for compatibility */
 			break;
 		default:
-			usage();
+			ldapc_usage();
 		}
 	}
 	argc -= optind;
@@ -161,7 +161,7 @@ main(int argc, char *argv[])
 
 	if (ldap.ldap_host == NULL || ldap.ldap_port == NULL) {
 		log_warnx("missing arguments");
-		usage();
+		ldapc_usage();
 	}
 
 	if (ldap.ldap_flags & F_NEEDAUTH) {
@@ -173,7 +173,7 @@ main(int argc, char *argv[])
 		}
 		if (ldap.ldap_binddn == NULL) {
 			log_warnx("missing -D binddn");
-			usage();
+			ldapc_usage();
 		}
 	}
 
