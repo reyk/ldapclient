@@ -35,6 +35,7 @@
 #include <string.h>
 #include <limits.h>
 #include <readpassphrase.h>
+#include <vis.h>
 
 #include "aldap.h"
 #include "log.h"
@@ -67,6 +68,7 @@ struct ldapc_search {
 __dead void	 ldapc_usage(void);
 int		 ldapc_connect(struct ldapc *);
 int		 ldapc_search(struct ldapc *, struct ldapc_search *);
+void		 ldapc_printattr(const char *, const char *);
 void		 ldapc_disconnect(struct ldapc *);
 const char	*ldapc_resultcode(enum result_code);
 
@@ -273,8 +275,7 @@ ldapc_search(struct ldapc *ldap, struct ldapc_search *ls)
 			    ret = aldap_next_attr(m, &outkey, &outvalues)) {
 				for (i = 0; outvalues != NULL &&
 				    outvalues[i] != NULL; i++) {
-					printf("%s: %s\n", outkey,
-					    outvalues[i]);
+					ldapc_printattr(outkey, outvalues[i]);
 				}
 			}
 			free(outkey);
@@ -289,6 +290,25 @@ ldapc_search(struct ldapc *ldap, struct ldapc_search *ls)
  fail:
 	ldapc_disconnect(ldap);
 	return (-1);
+}
+
+void
+ldapc_printattr(const char *key, const char *value)
+{
+	char	*pval;
+
+	/*
+	 * OpenLDAP+LDIF use base64 encoding for non-printable values
+	 * and we should also support it.  But everyone hates the
+	 * base64 encoding of ldapsearch and vis(1) provides a much
+	 * better solution as it is human-readable by default.
+	 */
+	if (stravis(&pval, value, VIS_SAFE|VIS_NL) == -1)
+		fatal("vis");
+
+	printf("%s: %s\n", key, pval);
+
+	free(pval);
 }
 
 int
