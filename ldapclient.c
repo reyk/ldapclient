@@ -14,7 +14,7 @@
  * OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
  */
 
-#include <sys/types.h>
+#include <sys/param.h>
 #include <sys/queue.h>
 #include <sys/socket.h>
 #include <sys/tree.h>
@@ -36,6 +36,7 @@
 #include <limits.h>
 #include <readpassphrase.h>
 #include <vis.h>
+#include <resolv.h>
 
 #include "aldap.h"
 #include "log.h"
@@ -43,10 +44,12 @@
 #define F_STARTTLS	0x01
 #define F_TLS		0x02
 #define F_NEEDAUTH	0x04
+#define F_LDIF		0x08
 
 #define CAPATH		"/etc/ssl/cert.pem"
 #define LDAPPORT	"389"
 #define LDAPFILTER	"(objectClass=*)"
+#define LDIF_LINELENGTH	79
 
 struct ldapc {
 	struct aldap	*ldap_al;
@@ -68,7 +71,7 @@ struct ldapc_search {
 __dead void	 ldapc_usage(void);
 int		 ldapc_connect(struct ldapc *);
 int		 ldapc_search(struct ldapc *, struct ldapc_search *);
-void		 ldapc_printattr(const char *, const char *);
+int		 ldapc_printattr(struct ldapc *, const char *, const char *);
 void		 ldapc_disconnect(struct ldapc *);
 const char	*ldapc_resultcode(enum result_code);
 
@@ -122,6 +125,9 @@ main(int argc, char *argv[])
 		case 'h':
 			ldap.ldap_host = optarg;
 			break;
+		case 'L':
+			ldap.ldap_flags |= F_LDIF;
+			break;
 		case 'p':
 			ldap.ldap_port = optarg;
 			break;
@@ -145,12 +151,11 @@ main(int argc, char *argv[])
 		case 'W':
 			ldap.ldap_flags |= F_NEEDAUTH;
 			break;
-		case 'Z':
-			ldap.ldap_flags |= F_STARTTLS;
-			break;
-		case 'L':
 		case 'x':
 			/* provided for compatibility */
+			break;
+		case 'Z':
+			ldap.ldap_flags |= F_STARTTLS;
 			break;
 		default:
 			ldapc_usage();
@@ -215,7 +220,7 @@ ldapc_search(struct ldapc *ldap, struct ldapc_search *ls)
 	const char			*searchdn, *dn = NULL;
 	char				*outkey;
 	char				**outvalues;
-	int				 ret, i, code;
+	int				 ret, i, code, fail = 0;
 
 	do {
 		if (aldap_search(ldap->ldap_al, ls->ls_basedn, ls->ls_scope,
@@ -275,7 +280,11 @@ ldapc_search(struct ldapc *ldap, struct ldapc_search *ls)
 			    ret = aldap_next_attr(m, &outkey, &outvalues)) {
 				for (i = 0; outvalues != NULL &&
 				    outvalues[i] != NULL; i++) {
-					ldapc_printattr(outkey, outvalues[i]);
+					if (ldapc_printattr(ldap, outkey,
+					    outvalues[i]) == -1) {
+						fail = 1;
+						break;
+					}
 				}
 			}
 			free(outkey);
@@ -283,32 +292,101 @@ ldapc_search(struct ldapc *ldap, struct ldapc_search *ls)
 
 			aldap_freemsg(m);
 		}
-	} while (pg != NULL);
+	} while (pg != NULL && fail == 0);
 
-
+	if (fail)
+		return (-1);
 	return (0);
  fail:
 	ldapc_disconnect(ldap);
 	return (-1);
 }
 
-void
-ldapc_printattr(const char *key, const char *value)
+int
+ldapc_printattr(struct ldapc *ldap, const char *key, const char *value)
 {
-	char	*pval;
+	char		*p = NULL, *out;
+	const char	*cp;
+	int		 encode;
+	size_t		 inlen, outlen, left;
 
-	/*
-	 * OpenLDAP+LDIF use base64 encoding for non-printable values
-	 * and we should also support it.  But everyone hates the
-	 * base64 encoding of ldapsearch and vis(1) provides a much
-	 * better solution as it is human-readable by default.
-	 */
-	if (stravis(&pval, value, VIS_SAFE|VIS_NL) == -1)
-		fatal("vis");
+	if (ldap->ldap_flags & F_LDIF) {
+		/* OpenLDAP encodes the userPassword by default */
+		if (strcasecmp("userPassword", key) == 0)
+			encode = 1;
+		else
+			encode = 0;
 
-	printf("%s: %s\n", key, pval);
+		/*
+		 * The LDIF format a set of characters that can be included
+		 * in SAFE-STRINGs. String value that do not match the
+		 * criteria must be encoded as Base64.
+		 */
+		for (cp = value; encode == 0 &&*cp != '\0'; cp++) {
+			/* !SAFE-CHAR %x01-09 / %x0B-0C / %x0E-7F */
+			if (*cp > 127 |
+			    *cp == '\0' ||
+			    *cp == '\n' ||
+			    *cp == '\r')
+				encode = 1;
+		}
 
-	free(pval);
+		if (!encode) {
+			if (asprintf(&p, "%s: %s", key, value) == -1) {
+				log_warnx("asprintf");
+				return (-1);
+			}
+		} else {
+			inlen = strlen(value);
+			outlen = inlen * 2 + 1;
+
+			if ((out = calloc(1, outlen)) == NULL ||
+			    b64_ntop(value, inlen, out, outlen) == -1) {
+				log_warnx("Base64 encoding failed");
+				free(p);
+				return (-1);
+			}
+
+			/* Base64 is indicated with a double-colon */
+			if (asprintf(&p, "%s: %s", key, out) == -1) {
+				log_warnx("asprintf");
+				free(out);
+				return (-1);
+			}
+			free(out);
+		}
+
+		/* Wrap lines */
+		for (outlen = 0, inlen = strlen(p);
+		    outlen < inlen;
+		    outlen += LDIF_LINELENGTH) {
+			if (outlen)
+				putchar(' ');
+			/* max. line length - newline - optional indent */
+			left = MIN(inlen - outlen, outlen ?
+			    LDIF_LINELENGTH - 2 :
+			    LDIF_LINELENGTH - 1);
+			fwrite(p + outlen, left, 1, stdout);
+			putchar('\n');
+		}
+	} else {
+		/*
+		 * Use vis(1) instead of base64 encoding of non-printable
+		 * values.  This is much nicer as it always prdocues a
+		 * human-readable visual output.  This can safely be done
+		 * on all values no matter if they include non-printable
+		 * characters.
+		 */
+		if (stravis(&p, value, VIS_SAFE|VIS_NL) == -1) {
+			log_warn("visual encoding failed");
+			return (-1);
+		}
+
+		printf("%s: %s\n", key, p);
+	}
+
+	free(p);
+	return (0);
 }
 
 int
