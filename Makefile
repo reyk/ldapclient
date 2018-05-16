@@ -1,7 +1,7 @@
 PROG=		ldapclient
 SRCS=		ldapclient.c aldap.c ber.c log.c
-LDADD+=		-ltls -levent -lutil
-DPADD+=		${LIBTLS} ${LIBEVENT} ${LIBUTIL}
+LDADD+=		-levent -ltls -lssl -lcrypto -lutil
+DPADD+=		${LIBEVENT} ${LIBTLS} ${LIBSSL} ${LIBCRYPTO} ${LIBUTIL}
 NOMAN=		yes
 
 CFLAGS+=	-Wall
