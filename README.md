@@ -69,6 +69,8 @@ The options are as follows:
 **-h** *host*
 
 > The hostname of the LDAP server.
+> The default is
+> *localhost*.
 
 **-L**
 

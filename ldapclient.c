@@ -49,6 +49,7 @@
 #define F_LDIF		0x08
 
 #define CAPATH		"/etc/ssl/cert.pem"
+#define LDAPHOST	"localhost"
 #define LDAPPORT	"389"
 #define LDAPFILTER	"(objectClass=*)"
 #define LDIF_LINELENGTH	79
@@ -112,6 +113,7 @@ main(int argc, char *argv[])
 	memset(&ldap, 0, sizeof(ldap));
 	memset(&ls, 0, sizeof(ls));
 
+	ldap.ldap_host = LDAPHOST;
 	ldap.ldap_port = LDAPPORT;
 	ldap.ldap_capath = CAPATH;
 
@@ -187,11 +189,6 @@ main(int argc, char *argv[])
 	argv += optind;
 
 	log_setverbose(verbose);
-
-	if (ldap.ldap_host == NULL || ldap.ldap_port == NULL) {
-		log_warnx("missing arguments");
-		usage();
-	}
 
 	if (ldap.ldap_flags & F_NEEDAUTH) {
 		if (ldap.ldap_secret == NULL) {
