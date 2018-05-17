@@ -697,7 +697,6 @@ void
 aldap_free_url(struct aldap_url *lu)
 {
 	free(lu->buffer);
-	free(lu->filter);
 }
 
 int
