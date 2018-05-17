@@ -13,9 +13,11 @@ ldap(1) - General Commands Manual
 \[**-c**&nbsp;*CAfile*]
 \[**-D**&nbsp;*binddn*]
 \[**-h**&nbsp;*host*]
+\[**-l**&nbsp;*timelimit*]
 \[**-p**&nbsp;*port*]
 \[**-s**&nbsp;*scope*]
 \[**-w**&nbsp;*secret*]
+\[**-z**&nbsp;*sizelimit*]
 \[*arguments&nbsp;...*]
 
 # DESCRIPTION
@@ -86,6 +88,15 @@ The options are as follows:
 > vis(3)
 > instead.
 
+**-l** *timelimit*
+
+> Request the server to abort the search request after
+> *timelimit*
+> seconds.
+> The default value is
+> *0*
+> for no limit.
+
 **-p** *port*
 
 > The port of the LDAP server.
@@ -127,6 +138,15 @@ The options are as follows:
 **-Z**
 
 > Enable TLS using the StartTLS operation.
+
+**-z** *sizelimit*
+
+> Request the server to limit the search result to a maximum number of
+> *sizelimit*
+> entries.
+> The default value is
+> *0*
+> for no limit.
 
 # EXAMPLES
 

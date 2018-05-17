@@ -24,21 +24,22 @@
 #include <netinet/in.h>
 #include <arpa/inet.h>
 
-#include <netdb.h>
-#include <errno.h>
-#include <err.h>
-#include <signal.h>
-#include <event.h>
-#include <fcntl.h>
-#include <unistd.h>
-#include <pwd.h>
 #include <stdio.h>
 #include <stdlib.h>
-#include <string.h>
+#include <stdint.h>
+#include <unistd.h>
+#include <err.h>
+#include <errno.h>
+#include <event.h>
+#include <fcntl.h>
 #include <limits.h>
+#include <netdb.h>
+#include <pwd.h>
 #include <readpassphrase.h>
-#include <vis.h>
 #include <resolv.h>
+#include <signal.h>
+#include <string.h>
+#include <vis.h>
 
 #include "aldap.h"
 #include "log.h"
@@ -66,6 +67,8 @@ struct ldapc {
 };
 
 struct ldapc_search {
+	int		 ls_sizelimit;
+	int		 ls_timelimit;
 	char		*ls_basedn;
 	char		*ls_filter;
 	enum scope	 ls_scope;
@@ -86,8 +89,8 @@ usage(void)
 
 	fprintf(stderr,
 "usage: ldap search [-LvxZ] [-b basedn] [-c capath] [-D binddn] [-h host]\n"
-"                   [-p port] [-s scope] [-w secret|-W]\n"
-"                   [filter] [attributes ...]\n"
+"                   [-l timelimit] [-p port] [-s scope] [-w secret|-W]\n"
+"                   [-z sizelimit] [filter] [attributes ...]\n"
 	);
 
 	exit(1);
@@ -96,7 +99,8 @@ usage(void)
 int
 main(int argc, char *argv[])
 {
-	char			 passbuf[256];
+	char			 passbuf[BUFSIZ];
+	const char		*errstr;
 	struct ldapc		 ldap;
 	struct ldapc_search	 ls;
 	int			 ch;
@@ -134,7 +138,7 @@ main(int argc, char *argv[])
 	argc--;
 	argv++;
 
-	while ((ch = getopt(argc, argv, "b:c:D:h:Lp:s:vWw:xZ")) != -1) {
+	while ((ch = getopt(argc, argv, "b:c:D:h:Ll:p:s:vWw:xZz:")) != -1) {
 		switch (ch) {
 		case 'b':
 			ls.ls_basedn = optarg;
@@ -151,6 +155,12 @@ main(int argc, char *argv[])
 			break;
 		case 'L':
 			ldap.ldap_flags |= F_LDIF;
+			break;
+		case 'l':
+			ls.ls_timelimit = strtonum(optarg, 0, INT_MAX,
+			    &errstr);
+			if (errstr != NULL)
+				errx(1, "timelimit %s", errstr);
 			break;
 		case 'p':
 			ldap.ldap_port = optarg;
@@ -180,6 +190,12 @@ main(int argc, char *argv[])
 			break;
 		case 'Z':
 			ldap.ldap_flags |= F_STARTTLS;
+			break;
+		case 'z':
+			ls.ls_sizelimit = strtonum(optarg, 0, INT_MAX,
+			    &errstr);
+			if (errstr != NULL)
+				errx(1, "sizelimit %s", errstr);
 			break;
 		default:
 			usage();
@@ -243,7 +259,8 @@ ldapc_search(struct ldapc *ldap, struct ldapc_search *ls)
 
 	do {
 		if (aldap_search(ldap->ldap_al, ls->ls_basedn, ls->ls_scope,
-		    ls->ls_filter, ls->ls_attr, 0, 0, 0, pg) == -1) {
+		    ls->ls_filter, ls->ls_attr, 0, ls->ls_sizelimit,
+		    ls->ls_timelimit, pg) == -1) {
 			aldap_get_errno(ldap->ldap_al, &errstr);
 			log_warnx("LDAP search failed: %s", errstr);
 			return (-1);

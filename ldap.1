@@ -28,9 +28,11 @@
 .Op Fl c Ar CAfile
 .Op Fl D Ar binddn
 .Op Fl h Ar host
+.Op Fl l Ar timelimit
 .Op Fl p Ar port
 .Op Fl s Ar scope
 .Op Fl w Ar secret
+.Op Fl z Ar sizelimit
 .Op Ar arguments ...
 .Sh DESCRIPTION
 The
@@ -89,6 +91,13 @@ encodes
 characters and newlines in a visual format using
 .Xr vis 3
 instead.
+.It Fl l Ar timelimit
+Request the server to abort the search request after
+.Ar timelimit
+seconds.
+The default value is
+.Ar 0
+for no limit.
 .It Fl p Ar port
 The port of the LDAP server.
 The default is
@@ -117,6 +126,13 @@ This is the default as
 does not support SASL authentication.
 .It Fl Z
 Enable TLS using the StartTLS operation.
+.It Fl z Ar sizelimit
+Request the server to limit the search result to a maximum number of
+.Ar sizelimit
+entries.
+The default value is
+.Ar 0
+for no limit.
 .El
 .Sh EXAMPLES
 The following script can be used with the
