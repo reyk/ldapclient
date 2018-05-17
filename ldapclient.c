@@ -20,6 +20,7 @@
 #include <sys/queue.h>
 #include <sys/socket.h>
 #include <sys/tree.h>
+#include <sys/un.h>
 
 #include <netinet/in.h>
 #include <arpa/inet.h>
@@ -28,6 +29,7 @@
 #include <stdlib.h>
 #include <stdint.h>
 #include <unistd.h>
+#include <ctype.h>
 #include <err.h>
 #include <errno.h>
 #include <event.h>
@@ -51,28 +53,29 @@
 
 #define CAPATH		"/etc/ssl/cert.pem"
 #define LDAPHOST	"localhost"
-#define LDAPPORT	"389"
 #define LDAPFILTER	"(objectClass=*)"
 #define LDIF_LINELENGTH	79
 
 struct ldapc {
-	struct aldap	*ldap_al;
-	char		*ldap_host;
-	char		*ldap_port;
-	char		*ldap_capath;
-	char		*ldap_binddn;
-	char		*ldap_secret;
-	unsigned int	 ldap_flags;
-	enum protocol_op ldap_req;
+	struct aldap		*ldap_al;
+	char			*ldap_host;
+	int			 ldap_port;
+	char			*ldap_capath;
+	char			*ldap_binddn;
+	char			*ldap_secret;
+	unsigned int		 ldap_flags;
+	enum protocol_op	 ldap_req;
+	enum aldap_protocol	 ldap_protocol;
+	struct aldap_url	 ldap_url;
 };
 
 struct ldapc_search {
-	int		 ls_sizelimit;
-	int		 ls_timelimit;
-	char		*ls_basedn;
-	char		*ls_filter;
-	enum scope	 ls_scope;
-	char		**ls_attr;
+	int			 ls_sizelimit;
+	int			 ls_timelimit;
+	char			*ls_basedn;
+	char			*ls_filter;
+	int			 ls_scope;
+	char			**ls_attr;
 };
 
 __dead void	 usage(void);
@@ -80,7 +83,10 @@ int		 ldapc_connect(struct ldapc *);
 int		 ldapc_search(struct ldapc *, struct ldapc_search *);
 int		 ldapc_printattr(struct ldapc *, const char *, const char *);
 void		 ldapc_disconnect(struct ldapc *);
+int		 ldapc_parseurl(struct ldapc *, struct ldapc_search *,
+		    const char *);
 const char	*ldapc_resultcode(enum result_code);
+const char	*url_decode(char *);
 
 __dead void
 usage(void)
@@ -88,9 +94,9 @@ usage(void)
 	extern char	*__progname;
 
 	fprintf(stderr,
-"usage: ldap search [-LvxZ] [-b basedn] [-c capath] [-D binddn] [-h host]\n"
-"                   [-l timelimit] [-p port] [-s scope] [-w secret|-W]\n"
-"                   [-z sizelimit] [filter] [attributes ...]\n"
+"usage: ldap search [-LvxZ] [-b basedn] [-c capath] [-D binddn] [-H host]\n"
+"                   [-l timelimit] [-s scope] [-w secret|-W] [-z sizelimit]\n"
+"                   [filter] [attributes ...]\n"
 	);
 
 	exit(1);
@@ -100,30 +106,21 @@ int
 main(int argc, char *argv[])
 {
 	char			 passbuf[BUFSIZ];
-	const char		*errstr;
+	const char		*errstr, *url = NULL;
 	struct ldapc		 ldap;
 	struct ldapc_search	 ls;
 	int			 ch;
 	int			 verbose = 1;
 
-	if (pledge("stdio inet tty rpath dns", NULL) == -1)
+	if (pledge("stdio inet unix tty rpath dns", NULL) == -1)
 		err(1, "pledge");
 
 	log_init(verbose, 0);
 
-	/*
-	 * Program defaults
-	 */
 	memset(&ldap, 0, sizeof(ldap));
 	memset(&ls, 0, sizeof(ls));
-
-	ldap.ldap_host = LDAPHOST;
-	ldap.ldap_port = LDAPPORT;
-	ldap.ldap_capath = CAPATH;
-
-	ls.ls_basedn = "";
-	ls.ls_scope = LDAP_SCOPE_SUBTREE;
-	ls.ls_filter = LDAPFILTER;
+	ls.ls_scope = -1;
+	ldap.ldap_port = -1;
 
 	/*
 	 * Check the command.  Currently only "search" is supported but
@@ -138,7 +135,7 @@ main(int argc, char *argv[])
 	argc--;
 	argv++;
 
-	while ((ch = getopt(argc, argv, "b:c:D:h:Ll:p:s:vWw:xZz:")) != -1) {
+	while ((ch = getopt(argc, argv, "b:c:D:H:Ll:s:vWw:xZz:")) != -1) {
 		switch (ch) {
 		case 'b':
 			ls.ls_basedn = optarg;
@@ -150,8 +147,8 @@ main(int argc, char *argv[])
 			ldap.ldap_binddn = optarg;
 			ldap.ldap_flags |= F_NEEDAUTH;
 			break;
-		case 'h':
-			ldap.ldap_host = optarg;
+		case 'H':
+			url = optarg;
 			break;
 		case 'L':
 			ldap.ldap_flags |= F_LDIF;
@@ -161,9 +158,6 @@ main(int argc, char *argv[])
 			    &errstr);
 			if (errstr != NULL)
 				errx(1, "timelimit %s", errstr);
-			break;
-		case 'p':
-			ldap.ldap_port = optarg;
 			break;
 		case 's':
 			if (strcasecmp("base", optarg) == 0)
@@ -206,6 +200,26 @@ main(int argc, char *argv[])
 
 	log_setverbose(verbose);
 
+	if (url != NULL && ldapc_parseurl(&ldap, &ls, url) == -1)
+		errx(1, "ldapurl");
+
+	/* Set the default after parsing URL and/or options */
+	if (ldap.ldap_host == NULL)
+		ldap.ldap_host = LDAPHOST;
+	if (ldap.ldap_port == -1)
+		ldap.ldap_port = ldap.ldap_protocol == LDAPS ?
+		    LDAPS_PORT : LDAP_PORT;
+	if (ldap.ldap_protocol == LDAP && (ldap.ldap_flags & F_STARTTLS))
+		ldap.ldap_protocol = LDAPTLS;
+	if (ldap.ldap_capath == NULL)
+		ldap.ldap_capath = CAPATH;
+	if (ls.ls_basedn == NULL)
+		ls.ls_basedn = "";
+	if (ls.ls_scope == -1)
+		ls.ls_scope = LDAP_SCOPE_SUBTREE;
+	if (ls.ls_filter == NULL)
+		ls.ls_filter = LDAPFILTER;
+
 	if (ldap.ldap_flags & F_NEEDAUTH) {
 		if (ldap.ldap_binddn == NULL) {
 			log_warnx("missing -D binddn");
@@ -219,7 +233,7 @@ main(int argc, char *argv[])
 		}
 	}
 
-	if (pledge("stdio inet rpath dns", NULL) == -1)
+	if (pledge("stdio inet unix rpath dns", NULL) == -1)
 		err(1, "pledge");
 
 	/* optional search filter */
@@ -242,6 +256,7 @@ main(int argc, char *argv[])
 		errx(1, "LDAP search failed");
 
 	ldapc_disconnect(&ldap);
+	aldap_free_url(&ldap.ldap_url);
 
 	return (0);
 }
@@ -429,16 +444,33 @@ int
 ldapc_connect(struct ldapc *ldap)
 {
 	struct addrinfo		 ai, *res, *res0;
+	struct sockaddr_un	 un;
 	int			 ret = -1, saved_errno, fd = -1, code;
 	struct aldap_message	*m;
 	const char		*errstr;
 	struct tls_config	*tls_config;
+	char			 port[6];
+
+	if (ldap->ldap_protocol == LDAPI) {
+		memset(&un, 0, sizeof(un));
+		un.sun_family = AF_UNIX;
+		if (strlcpy(un.sun_path, ldap->ldap_host,
+		    sizeof(un.sun_path)) >= sizeof(un.sun_path)) {
+			log_warnx("socket '%s' too long", ldap->ldap_host);
+			goto done;
+		}
+		if ((fd = socket(AF_UNIX, SOCK_STREAM, 0)) == -1 ||
+		    connect(fd, (struct sockaddr *)&un, sizeof(un)) == -1)
+			goto done;
+		goto init;
+	}
 
 	memset(&ai, 0, sizeof(ai));
 	ai.ai_family = AF_UNSPEC;
 	ai.ai_socktype = SOCK_STREAM;
 	ai.ai_protocol = IPPROTO_TCP;
-	if ((code = getaddrinfo(ldap->ldap_host, ldap->ldap_port,
+	(void)snprintf(port, sizeof(port), "%u", ldap->ldap_port);
+	if ((code = getaddrinfo(ldap->ldap_host, port,
 	    &ai, &res0)) != 0) {
 		log_warnx("%s", gai_strerror(code));
 		goto done;
@@ -455,10 +487,11 @@ ldapc_connect(struct ldapc *ldap)
 		close(fd);
 		errno = saved_errno;
 	}
+	freeaddrinfo(res0);
 	if (fd == -1)
 		goto done;
-	freeaddrinfo(res0);
 
+ init:
 	if ((ldap->ldap_al = aldap_init(fd)) == NULL) {
 		warn("LDAP init failed");
 		close(fd);
@@ -600,3 +633,105 @@ ldapc_resultcode(enum result_code code)
 		return ("UNKNOWN_ERROR");
 	}
 };
+
+int
+ldapc_parseurl(struct ldapc *ldap, struct ldapc_search *ls, const char *url)
+{
+	struct aldap_url	*lu = &ldap->ldap_url;
+
+	memset(lu, 0, sizeof(*lu));
+	lu->scope = -1;
+
+	/* See https://ldap.com/ldap-urls/ */
+	if (aldap_parse_url(url, lu) == -1) {
+		log_warnx("failed to parse LDAP URL");
+		return (-1);
+	}
+
+	/* Parse the (optional) URL */
+	if (lu->protocol == -1)
+		lu->protocol = LDAP;
+	else if (lu->protocol == LDAPI) {
+		if (lu->port != 0 ||
+		    url_decode(lu->host) == NULL) {
+			log_warnx("invalid ldapi:// URL");
+			return (-1);
+		}
+	} else if ((ldap->ldap_flags & F_STARTTLS) &&
+	    lu->protocol != LDAPTLS) {
+		log_warnx("conflicting protocol arguments");
+		return (-1);
+	} else if (lu->protocol == LDAPTLS)
+		ldap->ldap_flags |= F_TLS|F_STARTTLS;
+	else if (lu->protocol == LDAPS)
+		ldap->ldap_flags |= F_TLS;
+	ldap->ldap_protocol = lu->protocol;
+
+	if (lu->dn != NULL && ls->ls_basedn != NULL &&
+	    strcasecmp(ls->ls_basedn, lu->dn) != 0) {
+		log_warnx("conflicting basedn arguments");
+		return (-1);
+	}
+	if (lu->dn != NULL)
+		ls->ls_basedn = lu->dn;
+
+	if (lu->scope != -1) {
+		if (ls->ls_scope != -1 && (ls->ls_scope != lu->scope)) {
+			log_warnx("conflicting scope arguments");
+			return (-1);
+		}
+		ls->ls_scope = lu->scope;
+	}
+
+	ldap->ldap_host = lu->host;
+	if (lu->port)
+		ldap->ldap_port = lu->port;
+	if (lu->attributes[0] != NULL)
+		ls->ls_attr = lu->attributes;
+	if (lu->filter != NULL)
+		ls->ls_filter = lu->filter;
+
+	return (0);
+}
+
+/* From usr.sbin/httpd/httpd.c */
+const char *
+url_decode(char *url)
+{
+	char		*p, *q;
+	char		 hex[3];
+	unsigned long	 x;
+
+	hex[2] = '\0';
+	p = q = url;
+
+	while (*p != '\0') {
+		switch (*p) {
+		case '%':
+			/* Encoding character is followed by two hex chars */
+			if (!(isxdigit((unsigned char)p[1]) &&
+			    isxdigit((unsigned char)p[2])))
+				return (NULL);
+
+			hex[0] = p[1];
+			hex[1] = p[2];
+
+			/*
+			 * We don't have to validate "hex" because it is
+			 * guaranteed to include two hex chars followed by nul.
+			 */
+			x = strtoul(hex, NULL, 16);
+			*q = (char)x;
+			p += 2;
+			break;
+		default:
+			*q = *p;
+			break;
+		}
+		p++;
+		q++;
+	}
+	*q = '\0';
+
+	return (url);
+}

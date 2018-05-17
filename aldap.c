@@ -693,7 +693,6 @@ aldap_free_attr(char **values)
 	return (1);
 }
 
-#if 0
 void
 aldap_free_url(struct aldap_url *lu)
 {
@@ -702,7 +701,7 @@ aldap_free_url(struct aldap_url *lu)
 }
 
 int
-aldap_parse_url(char *url, struct aldap_url *lu)
+aldap_parse_url(const char *url, struct aldap_url *lu)
 {
 	char		*p, *forward, *forward2;
 	const char	*errstr = NULL;
@@ -712,10 +711,20 @@ aldap_parse_url(char *url, struct aldap_url *lu)
 		return (-1);
 
 	/* protocol */
-	if (strncasecmp(LDAP_URL, p, strlen(LDAP_URL)) != 0)
-		goto fail;
-	lu->protocol = LDAP;
-	p += strlen(LDAP_URL);
+	if (strncasecmp(LDAP_URL, p, strlen(LDAP_URL)) == 0) {
+		lu->protocol = LDAP;
+		p += strlen(LDAP_URL);
+	} else if (strncasecmp(LDAPS_URL, p, strlen(LDAPS_URL)) == 0) {
+		lu->protocol = LDAPS;
+		p += strlen(LDAPS_URL);
+	} else if (strncasecmp(LDAPTLS_URL, p, strlen(LDAPTLS_URL)) == 0) {
+		lu->protocol = LDAPTLS;
+		p += strlen(LDAPTLS_URL);
+	} else if (strncasecmp(LDAPI_URL, p, strlen(LDAPI_URL)) == 0) {
+		lu->protocol = LDAPI;
+		p += strlen(LDAPI_URL);
+	} else
+		lu->protocol = -1;
 
 	/* host and optional port */
 	if ((forward = strchr(p, '/')) != NULL)
@@ -795,7 +804,6 @@ aldap_parse_url(char *url, struct aldap_url *lu)
 	if (p)
 		lu->filter = p;
 done:
-	free(url);
 	return (1);
 fail:
 	free(lu->buffer);
@@ -805,7 +813,7 @@ fail:
 
 int
 aldap_search_url(struct aldap *ldap, char *url, int typesonly, int sizelimit,
-    int timelimit)
+    int timelimit, struct aldap_page_control *page)
 {
 	struct aldap_url *lu;
 
@@ -816,7 +824,7 @@ aldap_search_url(struct aldap *ldap, char *url, int typesonly, int sizelimit,
 		goto fail;
 
 	if (aldap_search(ldap, lu->dn, lu->scope, lu->filter, lu->attributes,
-	    typesonly, sizelimit, timelimit) == -1)
+	    typesonly, sizelimit, timelimit, page) == -1)
 		goto fail;
 
 	aldap_free_url(lu);
@@ -825,7 +833,6 @@ fail:
 	aldap_free_url(lu);
 	return (-1);
 }
-#endif /* 0 */
 
 /*
  * internal functions

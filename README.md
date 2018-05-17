@@ -12,9 +12,8 @@ ldap(1) - General Commands Manual
 \[**-b**&nbsp;*basedn*]
 \[**-c**&nbsp;*CAfile*]
 \[**-D**&nbsp;*binddn*]
-\[**-h**&nbsp;*host*]
+\[**-H**&nbsp;*host*]
 \[**-l**&nbsp;*timelimit*]
-\[**-p**&nbsp;*port*]
 \[**-s**&nbsp;*scope*]
 \[**-w**&nbsp;*secret*]
 \[**-z**&nbsp;*sizelimit*]
@@ -68,11 +67,43 @@ The options are as follows:
 
 > Use the specified distinguished name to bind to the directory.
 
-**-h** *host*
+**-H** *host*
 
-> The hostname of the LDAP server.
+> The hostname of the LDAP server or an LDAP URL.
+> The LDAP URL is a standardized format that contains the address and
+> optional search filters:
+
+> \[*protocol*://]*host*\[:*port*]\[*/basedn*\[*&#63;attribute,...*]\[*&#63;scope*]\[*&#63;filter*]]
+
+> The following protocols are supported:
+
+> ldap
+
+> > Connect with TCP in plain text.
+> > This is the default.
+
+> ldaps
+
+> > Connect with TLS.
+> > The default port is 636.
+
+> ldap+tls
+
+> > Connect with TCP and enable TLS using the StartTLS operation.
+> > This is the same as the
+> > **-Z**
+> > option.
+
+> ldapi
+
+> > Connect to a UNIX-domain socket.
+> > The host argument is required to be an URL-encoded path, for example
+> > *ldapi://%2fvar%2frun%2fldapi*
+> > for
+> > */var/run/ldapi*.
+
 > The default is
-> *localhost*.
+> *ldap://localhost:389/*.
 
 **-L**
 
@@ -96,12 +127,6 @@ The options are as follows:
 > The default value is
 > *0*
 > for no limit.
-
-**-p** *port*
-
-> The port of the LDAP server.
-> The default is
-> *389*.
 
 **-s** *scope*
 
@@ -158,7 +183,7 @@ sshd(8):
 	#!/bin/sh
 	ldap search -D cn=Reader,dc=example,dc=com -w mypass123 \
 		-b ou=People,dc=example,dc=com \
-		-h ldapserver -c /etc/ssl/ldapserver.crt -Z \
+		-H ldapserver -c /etc/ssl/ldapserver.crt -Z \
 		"(&(objectClass=bsdAccount)(uid=$1))" sshPublicKey | \
 		sed 's/sshPublicKey: //'
 	exit 0
@@ -209,9 +234,5 @@ The
 tool does not support SASL authentication;
 authentication should be performed using simple authentication over a
 TLS connection.
-
-LDAP commonly supports two methods of establishing TLS:
-TLS over LDAP using StartTLS (port 389), and LDAPS (port 636).
-The LDAPS method is currently not supported.
 
 OpenBSD 6.3 - May 17, 2018

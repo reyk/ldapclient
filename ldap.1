@@ -27,9 +27,8 @@
 .Op Fl b Ar basedn
 .Op Fl c Ar CAfile
 .Op Fl D Ar binddn
-.Op Fl h Ar host
+.Op Fl H Ar host
 .Op Fl l Ar timelimit
-.Op Fl p Ar port
 .Op Fl s Ar scope
 .Op Fl w Ar secret
 .Op Fl z Ar sizelimit
@@ -75,10 +74,45 @@ use a file that contains the server certificate in PEM format, e.g.
 .Pa /etc/ssl/ldapserver.example.com.crt .
 .It Fl D Ar binddn
 Use the specified distinguished name to bind to the directory.
-.It Fl h Ar host
-The hostname of the LDAP server.
+.It Fl H Ar host
+The hostname of the LDAP server or an LDAP URL.
+The LDAP URL is a standardized format that contains the address and
+optional search filters:
+.Pp
+.Sm off
+.Op Ar protocol No ://
+.Ar host Op : Ar port
+.Oo Ar / basedn
+.Op Ar \? attribute,...
+.Op Ar \? scope
+.Op Ar \? filter
+.Oc
+.Sm on
+.Pp
+The following protocols are supported:
+.Pp
+.Bl -tag -width "ldap+tls" -compact
+.It ldap
+Connect with TCP in plain text.
+This is the default.
+.It ldaps
+Connect with TLS.
+The default port is 636.
+.It ldap+tls
+Connect with TCP and enable TLS using the StartTLS operation.
+This is the same as the
+.Fl Z
+option.
+.It ldapi
+Connect to a UNIX-domain socket.
+The host argument is required to be an URL-encoded path, for example
+.Ar ldapi://%2fvar%2frun%2fldapi
+for
+.Pa /var/run/ldapi .
+.El
+.Pp
 The default is
-.Ar localhost .
+.Ar ldap://localhost:389/ .
 .It Fl L
 Output the directory search result in a standards-compliant version of
 the LDAP Data Interchange Format (LDIF).
@@ -98,10 +132,6 @@ seconds.
 The default value is
 .Ar 0
 for no limit.
-.It Fl p Ar port
-The port of the LDAP server.
-The default is
-.Ar 389 .
 .It Fl s Ar scope
 Specify the
 .Ar scope
@@ -143,7 +173,7 @@ option of
 #!/bin/sh
 ldap search -D cn=Reader,dc=example,dc=com -w mypass123 \e
 	-b ou=People,dc=example,dc=com \e
-	-h ldapserver -c /etc/ssl/ldapserver.crt -Z \e
+	-H ldapserver -c /etc/ssl/ldapserver.crt -Z \e
 	"(&(objectClass=bsdAccount)(uid=$1))" sshPublicKey | \e
 	sed 's/sshPublicKey: //'
 exit 0
@@ -191,7 +221,3 @@ The
 tool does not support SASL authentication;
 authentication should be performed using simple authentication over a
 TLS connection.
-.Pp
-LDAP commonly supports two methods of establishing TLS:
-TLS over LDAP using StartTLS (port 389), and LDAPS (port 636).
-The LDAPS method is currently not supported.
