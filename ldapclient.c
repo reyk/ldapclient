@@ -219,7 +219,7 @@ main(int argc, char *argv[])
 	if (ldapc_connect(&ldap) == -1)
 		errx(1, "LDAP connection failed");
 
-	if (pledge("stdio inet", NULL) == -1)
+	if (pledge("stdio", NULL) == -1)
 		err(1, "pledge");
 
 	if (ldapc_search(&ldap, &ls) == -1)
