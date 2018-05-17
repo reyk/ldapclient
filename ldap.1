@@ -76,8 +76,7 @@ use a file that contains the server certificate in PEM format, e.g.
 Use the specified distinguished name to bind to the directory.
 .It Fl H Ar host
 The hostname of the LDAP server or an LDAP URL.
-The LDAP URL is a standardized format that contains the address and
-optional search filters:
+The LDAP URL is described in RFC 4516 with the following format:
 .Pp
 .Sm off
 .Op Ar protocol No ://
@@ -209,6 +208,15 @@ Default CA file.
 .%D June 2006
 .%R RFC 4515
 .%T Lightweight Directory Access Protocol (LDAP): String Representation of Search Filters
+.Re
+.Pp
+.Rs
+.%A M. Smith, Ed.
+.%A T. Howes
+.%D June 2006
+.%R RFC 4516
+.%T Lightweight Directory Access Protocol (LDAP): Uniform Resource Locator
+..Re
 .Sh AUTHORS
 .An -nosplit
 The

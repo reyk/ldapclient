@@ -638,17 +638,17 @@ int
 ldapc_parseurl(struct ldapc *ldap, struct ldapc_search *ls, const char *url)
 {
 	struct aldap_url	*lu = &ldap->ldap_url;
+	size_t			 i;
 
 	memset(lu, 0, sizeof(*lu));
 	lu->scope = -1;
 
-	/* See https://ldap.com/ldap-urls/ */
 	if (aldap_parse_url(url, lu) == -1) {
 		log_warnx("failed to parse LDAP URL");
 		return (-1);
 	}
 
-	/* Parse the (optional) URL */
+	/* The protocol part is optional and we default to ldap:// */
 	if (lu->protocol == -1)
 		lu->protocol = LDAP;
 	else if (lu->protocol == LDAPI) {
@@ -667,13 +667,21 @@ ldapc_parseurl(struct ldapc *ldap, struct ldapc_search *ls, const char *url)
 		ldap->ldap_flags |= F_TLS;
 	ldap->ldap_protocol = lu->protocol;
 
+	ldap->ldap_host = lu->host;
+	if (lu->port)
+		ldap->ldap_port = lu->port;
+
+	/* The distinguished name has to be URL-encoded */
 	if (lu->dn != NULL && ls->ls_basedn != NULL &&
 	    strcasecmp(ls->ls_basedn, lu->dn) != 0) {
 		log_warnx("conflicting basedn arguments");
 		return (-1);
 	}
-	if (lu->dn != NULL)
+	if (lu->dn != NULL) {
+		if (url_decode(lu->dn) == NULL)
+			return (-1);
 		ls->ls_basedn = lu->dn;
+	}
 
 	if (lu->scope != -1) {
 		if (ls->ls_scope != -1 && (ls->ls_scope != lu->scope)) {
@@ -683,13 +691,18 @@ ldapc_parseurl(struct ldapc *ldap, struct ldapc_search *ls, const char *url)
 		ls->ls_scope = lu->scope;
 	}
 
-	ldap->ldap_host = lu->host;
-	if (lu->port)
-		ldap->ldap_port = lu->port;
-	if (lu->attributes[0] != NULL)
+	/* URL-decode optional attributes and the search filter */
+	if (lu->attributes[0] != NULL) {
+		for (i = 0; i < MAXATTR && lu->attributes[i] != NULL; i++)
+			if (url_decode(lu->attributes[i]) == NULL)
+				return (-1);
 		ls->ls_attr = lu->attributes;
-	if (lu->filter != NULL)
+	}
+	if (lu->filter != NULL) {
+		if (url_decode(lu->filter) == NULL)
+			return (-1);
 		ls->ls_filter = lu->filter;
+	}
 
 	return (0);
 }
