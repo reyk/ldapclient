@@ -70,8 +70,7 @@ The options are as follows:
 **-H** *host*
 
 > The hostname of the LDAP server or an LDAP URL.
-> The LDAP URL is a standardized format that contains the address and
-> optional search filters:
+> The LDAP URL is described in RFC 4516 with the following format:
 
 > \[*protocol*://]*host*\[:*port*]\[*/basedn*\[*&#63;attribute,...*]\[*&#63;scope*]\[*&#63;filter*]]
 
@@ -218,6 +217,12 @@ M. Smith, Ed.,
 T. Howes,
 *Lightweight Directory Access Protocol (LDAP): String Representation of Search Filters*,
 RFC 4515,
+June 2006.
+
+M. Smith, Ed.,
+T. Howes,
+*Lightweight Directory Access Protocol (LDAP): Uniform Resource Locator*,
+RFC 4516,
 June 2006.
 
 # AUTHORS
