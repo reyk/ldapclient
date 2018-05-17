@@ -1,4 +1,4 @@
-PROG=		ldapclient
+PROG=		ldap
 SRCS=		ldapclient.c aldap.c ber.c log.c
 LDADD+=		-levent -ltls -lssl -lcrypto -lutil
 DPADD+=		${LIBEVENT} ${LIBTLS} ${LIBSSL} ${LIBCRYPTO} ${LIBUTIL}

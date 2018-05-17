@@ -1,3 +1,5 @@
+/*	$OpenBSD$	*/
+
 /*
  * Copyright (c) 2018 Reyk Floeter <reyk@openbsd.org>
  *
@@ -59,6 +61,7 @@ struct ldapc {
 	char		*ldap_binddn;
 	char		*ldap_secret;
 	unsigned int	 ldap_flags;
+	enum protocol_op ldap_req;
 };
 
 struct ldapc_search {
@@ -68,7 +71,7 @@ struct ldapc_search {
 	char		**ls_attr;
 };
 
-__dead void	 ldapc_usage(void);
+__dead void	 usage(void);
 int		 ldapc_connect(struct ldapc *);
 int		 ldapc_search(struct ldapc *, struct ldapc_search *);
 int		 ldapc_printattr(struct ldapc *, const char *, const char *);
@@ -76,13 +79,16 @@ void		 ldapc_disconnect(struct ldapc *);
 const char	*ldapc_resultcode(enum result_code);
 
 __dead void
-ldapc_usage(void)
+usage(void)
 {
 	extern char	*__progname;
 
-	fprintf(stderr, "usage: %s [-LvxZ] [-c capath] [-p port] [-b basedn]\n"
-	    "%*s [-D binddn] [-w secret|-W] [-s scope] -h host [filter]\n",
-	    __progname, (int)(strlen(__progname) + strlen("usage: ")), "");
+	fprintf(stderr,
+"usage: ldap search [-LvxZ] [-b basedn] [-c capath] [-D binddn] [-h host]\n"
+"                   [-p port] [-s scope] [-w secret|-W]\n"
+"                   [filter] [attributes ...]\n"
+	);
+
 	exit(1);
 }
 
@@ -100,6 +106,9 @@ main(int argc, char *argv[])
 
 	log_init(verbose, 0);
 
+	/*
+	 * Program defaults
+	 */
 	memset(&ldap, 0, sizeof(ldap));
 	memset(&ls, 0, sizeof(ls));
 
@@ -109,6 +118,19 @@ main(int argc, char *argv[])
 	ls.ls_basedn = "";
 	ls.ls_scope = LDAP_SCOPE_SUBTREE;
 	ls.ls_filter = LDAPFILTER;
+
+	/*
+	 * Check the command.  Currently only "search" is supported but
+	 * it could be extended with others such as add, modify, or delete.
+	 */
+	if (argc < 2)
+		usage();
+	else if (strcmp("search", argv[1]) == 0)
+		ldap.ldap_req = LDAP_REQ_SEARCH;
+	else
+		usage();
+	argc--;
+	argv++;
 
 	while ((ch = getopt(argc, argv, "b:c:D:h:Lp:s:vWw:xZ")) != -1) {
 		switch (ch) {
@@ -158,7 +180,7 @@ main(int argc, char *argv[])
 			ldap.ldap_flags |= F_STARTTLS;
 			break;
 		default:
-			ldapc_usage();
+			usage();
 		}
 	}
 	argc -= optind;
@@ -168,7 +190,7 @@ main(int argc, char *argv[])
 
 	if (ldap.ldap_host == NULL || ldap.ldap_port == NULL) {
 		log_warnx("missing arguments");
-		ldapc_usage();
+		usage();
 	}
 
 	if (ldap.ldap_flags & F_NEEDAUTH) {
@@ -180,7 +202,7 @@ main(int argc, char *argv[])
 		}
 		if (ldap.ldap_binddn == NULL) {
 			log_warnx("missing -D binddn");
-			ldapc_usage();
+			usage();
 		}
 	}
 

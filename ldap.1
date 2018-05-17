@@ -1,3 +1,4 @@
+.\" $OpenBSD$
 .\"
 .\" Copyright (c) 2018 Reyk Floeter <reyk@openbsd.org>
 .\"
@@ -14,31 +15,34 @@
 .\" OR IN CONNECTION WITH THE USE OR PERFORMANCE OF THIS SOFTWARE.
 .\"
 .Dd $Mdocdate$
-.Dt ldapclient 1
+.Dt ldap 1
 .Os
 .Sh NAME
-.Nm ldapclient
-.Nd Simple LDAP search client.
+.Nm ldap
+.Nd Simple LDAP client.
 .Sh SYNOPSIS
-.Nm ldapclient
+.Nm ldap
+.Ar command
 .Op Fl LvWxZ
 .Op Fl b Ar basedn
 .Op Fl c Ar CAfile
-.Op Fl b Ar binddn
 .Op Fl D Ar binddn
 .Op Fl h Ar host
 .Op Fl p Ar port
 .Op Fl s Ar scope
 .Op Fl w Ar secret
-.Ar filter
-.Op Ar attribute ...
+.Op Ar arguments ...
 .Sh DESCRIPTION
 The
 .Nm
 program is a simple LDAP client program.
-It queries an LDAP server to perform a directory search and outputs
-the results in the LDAP Data Interchange Format (LDIF).
+It queries an LDAP server to perform a command and outputs the results
+in the LDAP Data Interchange Format (LDIF).
 .Pp
+The commands are as follows:
+.Bl -tag -width Ds
+.It Cm search Ar options Ar filter Op Ar attribute ...
+Perform a directory search request.
 The optional
 .Ar filter
 argument specifies the LDAP filter for the directory search.
@@ -52,12 +56,13 @@ If one or more
 options are specified,
 .Nm
 restricts the output to the specified attributes.
+.El
 .Pp
 The options are as follows:
 .Bl -tag -width Ds
 .It Fl b Ar basedn
 Use the specified distinguished name (dn) as the starting point for
-the directory search.
+directory search requests.
 .It Fl c Ar CAfile
 When TLS is enabled, load the CA bundle for certificate verification
 from the specified file.
@@ -118,7 +123,7 @@ option of
 .Xr sshd 8 :
 .Bd -literal -offset indent
 #!/bin/sh
-ldapclient -D cn=Reader,dc=example,dc=com -w mypass123 \e
+ldap search -D cn=Reader,dc=example,dc=com -w mypass123 \e
 	-b ou=People,dc=example,dc=com \e
 	-h ldapserver -c /etc/ssl/ldapserver.crt -Z \e
 	"(&(objectClass=bsdAccount)(uid=$1))" sshPublicKey | \e
@@ -131,7 +136,7 @@ And the related configuration in
 .Bd -literal -offset indent
 Match Group ldapusers
 	AuthorizedKeysCommand /etc/ssh/ldap-authorized_keys.sh
-	AuthorizedKeysCommandUser _ldapclient
+	AuthorizedKeysCommandUser _ldap
 .Ed
 .Sh FILES
 .Bl -tag -width "/etc/ssl/cert.pemXXX" -compact

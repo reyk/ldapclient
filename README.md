@@ -1,52 +1,56 @@
-ldapclient(1) - General Commands Manual
+ldap(1) - General Commands Manual
 
 # NAME
 
-**ldapclient** - Simple LDAP search client.
+**ldap** - Simple LDAP client.
 
 # SYNOPSIS
 
-**ldapclient**
+**ldap**
+*command*
 \[**-LvWxZ**]
 \[**-b**&nbsp;*basedn*]
 \[**-c**&nbsp;*CAfile*]
-\[**-b**&nbsp;*binddn*]
 \[**-D**&nbsp;*binddn*]
 \[**-h**&nbsp;*host*]
 \[**-p**&nbsp;*port*]
 \[**-s**&nbsp;*scope*]
 \[**-w**&nbsp;*secret*]
-*filter*
-\[*attribute&nbsp;...*]
+\[*arguments&nbsp;...*]
 
 # DESCRIPTION
 
 The
-**ldapclient**
+**ldap**
 program is a simple LDAP client program.
-It queries an LDAP server to perform a directory search and outputs
-the results in the LDAP Data Interchange Format (LDIF).
+It queries an LDAP server to perform a command and outputs the results
+in the LDAP Data Interchange Format (LDIF).
 
-The optional
-*filter*
-argument specifies the LDAP filter for the directory search.
-The default is
-*(objectClass=\*)*
-and the format must comply to the
-"String Representation of Search Filters"
-as described in RFC 4515.
-If one or more
-*attribute*
-options are specified,
-**ldapclient**
-restricts the output to the specified attributes.
+The commands are as follows:
+
+**search** *options* *filter* \[*attribute ...*]
+
+> Perform a directory search request.
+> The optional
+> *filter*
+> argument specifies the LDAP filter for the directory search.
+> The default is
+> *(objectClass=\*)*
+> and the format must comply to the
+> "String Representation of Search Filters"
+> as described in RFC 4515.
+> If one or more
+> *attribute*
+> options are specified,
+> **ldap**
+> restricts the output to the specified attributes.
 
 The options are as follows:
 
 **-b** *basedn*
 
 > Use the specified distinguished name (dn) as the starting point for
-> the directory search.
+> directory search requests.
 
 **-c** *CAfile*
 
@@ -73,7 +77,7 @@ The options are as follows:
 > This encodes attribute values that include non-printable or UTF-8
 > characters in the Base64 format and wraps lines at a 79-character limit.
 > If this option is not specified,
-> **ldapclient**
+> **ldap**
 > encodes
 > "unsafe"
 > characters and newlines in a visual format using
@@ -115,7 +119,7 @@ The options are as follows:
 
 > Use simple authentication.
 > This is the default as
-> **ldapclient**
+> **ldap**
 > does not support SASL authentication.
 
 **-Z**
@@ -130,7 +134,7 @@ option of
 sshd(8):
 
 	#!/bin/sh
-	ldapclient -D cn=Reader,dc=example,dc=com -w mypass123 \
+	ldap search -D cn=Reader,dc=example,dc=com -w mypass123 \
 		-b ou=People,dc=example,dc=com \
 		-h ldapserver -c /etc/ssl/ldapserver.crt -Z \
 		"(&(objectClass=bsdAccount)(uid=$1))" sshPublicKey | \
@@ -142,7 +146,7 @@ sshd\_config(5):
 
 	Match Group ldapusers
 		AuthorizedKeysCommand /etc/ssh/ldap-authorized_keys.sh
-		AuthorizedKeysCommandUser _ldapclient
+		AuthorizedKeysCommandUser _ldap
 
 # FILES
 
@@ -172,14 +176,14 @@ June 2006.
 # AUTHORS
 
 The
-**ldapclient**
+**ldap**
 program was written by
 Reyk Floeter &lt;[reyk@openbsd.org](mailto:reyk@openbsd.org)&gt;.
 
 # CAVEATS
 
 The
-**ldapclient**
+**ldap**
 tool does not support SASL authentication;
 authentication should be performed using simple authentication over a
 TLS connection.
@@ -188,4 +192,4 @@ LDAP commonly supports two methods of establishing TLS:
 TLS over LDAP using StartTLS (port 389), and LDAPS (port 636).
 The LDAPS method is currently not supported.
 
-OpenBSD 6.3 - May 15, 2018
+OpenBSD 6.3 - May 17, 2018
