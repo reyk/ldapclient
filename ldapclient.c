@@ -207,15 +207,15 @@ main(int argc, char *argv[])
 	log_setverbose(verbose);
 
 	if (ldap.ldap_flags & F_NEEDAUTH) {
+		if (ldap.ldap_binddn == NULL) {
+			log_warnx("missing -D binddn");
+			usage();
+		}
 		if (ldap.ldap_secret == NULL) {
 			if (readpassphrase("Password: ",
 			    passbuf, sizeof(passbuf), RPP_REQUIRE_TTY) == NULL)
 				errx(1, "failed to read LDAP password");
 			ldap.ldap_secret = passbuf;
-		}
-		if (ldap.ldap_binddn == NULL) {
-			log_warnx("missing -D binddn");
-			usage();
 		}
 	}
 
@@ -429,7 +429,7 @@ int
 ldapc_connect(struct ldapc *ldap)
 {
 	struct addrinfo		 ai, *res, *res0;
-	int			 ret, saved_errno, fd = -1, code = -1;
+	int			 ret = -1, saved_errno, fd = -1, code;
 	struct aldap_message	*m;
 	const char		*errstr;
 	struct tls_config	*tls_config;
@@ -438,10 +438,10 @@ ldapc_connect(struct ldapc *ldap)
 	ai.ai_family = AF_UNSPEC;
 	ai.ai_socktype = SOCK_STREAM;
 	ai.ai_protocol = IPPROTO_TCP;
-	if ((ret = getaddrinfo(ldap->ldap_host, ldap->ldap_port,
+	if ((code = getaddrinfo(ldap->ldap_host, ldap->ldap_port,
 	    &ai, &res0)) != 0) {
-		log_warnx("%s", gai_strerror(ret));
-		return (-1);
+		log_warnx("%s", gai_strerror(code));
+		goto done;
 	}
 	for (res = res0; res; res = res->ai_next, fd = -1) {
 		if ((fd = socket(res->ai_family, res->ai_socktype,
@@ -456,25 +456,25 @@ ldapc_connect(struct ldapc *ldap)
 		errno = saved_errno;
 	}
 	if (fd == -1)
-		return (-1);
+		goto done;
 	freeaddrinfo(res0);
 
 	if ((ldap->ldap_al = aldap_init(fd)) == NULL) {
 		warn("LDAP init failed");
 		close(fd);
-		return (-1);
+		goto done;
 	}
 
 	if (ldap->ldap_flags & F_STARTTLS) {
 		log_debug("%s: requesting STARTTLS", __func__);
 		if (aldap_req_starttls(ldap->ldap_al) == -1) {
 			log_warnx("failed to request STARTTLS");
-			goto fail;
+			goto done;
 		}
 
 		if ((m = aldap_parse(ldap->ldap_al)) == NULL) {
 			log_warnx("failed to parse STARTTLS response");
-			goto fail;
+			goto done;
 		}
 
 		if (ldap->ldap_al->msgid != m->msgid ||
@@ -482,7 +482,7 @@ ldapc_connect(struct ldapc *ldap)
 			log_warnx("STARTTLS failed: %s(%d)",
 			    ldapc_resultcode(code), code);
 			aldap_freemsg(m);
-			goto fail;
+			goto done;
 		}
 		aldap_freemsg(m);
 	}
@@ -492,19 +492,19 @@ ldapc_connect(struct ldapc *ldap)
 
 		if ((tls_config = tls_config_new()) == NULL) {
 			log_warnx("TLS config failed");
-			goto fail;
+			goto done;
 		}
 
 		if (tls_config_set_ca_file(tls_config,
 		    ldap->ldap_capath) == -1) {
 			log_warnx("unable to set CA %s", ldap->ldap_capath);
-			goto fail;
+			goto done;
 		}
 
 		if (aldap_tls(ldap->ldap_al, tls_config, ldap->ldap_host) < 0) {
 			aldap_get_errno(ldap->ldap_al, &errstr);
 			log_warnx("TLS failed: %s", errstr);
-			goto fail;
+			goto done;
 		}
 	}
 
@@ -513,12 +513,12 @@ ldapc_connect(struct ldapc *ldap)
 		if (aldap_bind(ldap->ldap_al, ldap->ldap_binddn,
 		    ldap->ldap_secret) == -1) {
 			log_warnx("bind request failed");
-			goto fail;
+			goto done;
 		}
 
 		if ((m = aldap_parse(ldap->ldap_al)) == NULL) {
 			log_warnx("failed to parse bind response");
-			goto fail;
+			goto done;
 		}
 
 		if (ldap->ldap_al->msgid != m->msgid ||
@@ -526,17 +526,21 @@ ldapc_connect(struct ldapc *ldap)
 			log_warnx("bind failed: %s(%d)",
 			    ldapc_resultcode(code), code);
 			aldap_freemsg(m);
-			goto fail;
+			goto done;
 		}
 		aldap_freemsg(m);
 	}
 
 	log_debug("%s: connected", __func__);
 
-	return (0);
- fail:
-	ldapc_disconnect(ldap);
-	return (-1);
+	ret = 0;
+ done:
+	if (ret != 0)
+		ldapc_disconnect(ldap);
+	if (ldap->ldap_secret != NULL)
+		explicit_bzero(ldap->ldap_secret,
+		    strlen(ldap->ldap_secret));
+	return (ret);
 }
 
 void
