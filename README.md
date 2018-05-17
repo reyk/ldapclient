@@ -28,7 +28,7 @@ program is a simple LDAP client program.
 It queries an LDAP server to perform a command and outputs the results
 in the LDAP Data Interchange Format (LDIF).
 
-The commands are as follows:
+The command is as follows:
 
 **search** *options* *filter* \[*attribute ...*]
 
