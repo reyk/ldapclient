@@ -356,10 +356,10 @@ ldapc_search(struct ldapc *ldap, struct ldapc_search *ls)
 int
 ldapc_printattr(struct ldapc *ldap, const char *key, const char *value)
 {
-	char		*p = NULL, *out;
-	const char	*cp;
-	int		 encode;
-	size_t		 inlen, outlen, left;
+	char			*p = NULL, *out;
+	const unsigned char	*cp;
+	int			 encode;
+	size_t			 inlen, outlen, left;
 
 	if (ldap->ldap_flags & F_LDIF) {
 		/* OpenLDAP encodes the userPassword by default */
@@ -373,9 +373,10 @@ ldapc_printattr(struct ldapc *ldap, const char *key, const char *value)
 		 * in SAFE-STRINGs. String value that do not match the
 		 * criteria must be encoded as Base64.
 		 */
-		for (cp = value; encode == 0 &&*cp != '\0'; cp++) {
+		for (cp = (const unsigned char *)value;
+		    encode == 0 &&*cp != '\0'; cp++) {
 			/* !SAFE-CHAR %x01-09 / %x0B-0C / %x0E-7F */
-			if (*cp > 127 |
+			if (*cp > 127 ||
 			    *cp == '\0' ||
 			    *cp == '\n' ||
 			    *cp == '\r')
