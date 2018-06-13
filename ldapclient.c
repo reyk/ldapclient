@@ -94,10 +94,10 @@ usage(void)
 	extern char	*__progname;
 
 	fprintf(stderr,
-"usage: ldap search [-LvxZ] [-b basedn] [-c capath] [-D binddn] [-H host]\n"
+"usage: %s search [-LvxZ] [-b basedn] [-c capath] [-D binddn] [-H host]\n"
 "                   [-l timelimit] [-s scope] [-w secret|-W] [-z sizelimit]\n"
-"                   [filter] [attributes ...]\n"
-	);
+"                   [filter] [attributes ...]\n",
+	    __progname);
 
 	exit(1);
 }
